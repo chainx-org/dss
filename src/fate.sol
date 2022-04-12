@@ -155,7 +155,10 @@ contract Fate {
         (, uint256 rate,,,) = VatLike(vat).ilks(ilk);
         (, uint256 art) = VatLike(vat).urns(ilk, urn);
         require(rate > rates[cdp], "Fate/rate-too-low");
-        gem.mint(msg.sender, rmul(sub(rate, rates[cdp]),  art));
+        alpha = calculate_alpha(now - start -delay);
+        diff_rate = rate - rates[cdp];
+        reward = rmul(alpha, rmul(rate, art));
+        gem.mint(msg.sender, reward);
         rates[cdp] = rate;
     }
 
