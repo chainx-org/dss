@@ -114,7 +114,7 @@ contract Fate {
 
     function treasure() external {
         uint256 wads;
-        (, address[] memory urns, bytes32[] memory ilks) = cdps.getCdpsAsc(manager, msg.sender);
+        (, address[] memory urns, bytes32[] memory ilks) = cdps.getCdpsAsc(manager, address(this));
         destiny();
         for (uint i = 0; i < urns.length; i++) {
             wads = wads + adventure(ilks[i], urns[i]);
