@@ -28,7 +28,7 @@ contract Fate {
         vat = VatLike(vat_);
         jug = JugLike(jug_);
         gov = TokenLike(gov_);
-        last = block.timestamp;
+        last = block.timestamp + 3 days;
         alpha = M;
     }
 
@@ -78,9 +78,9 @@ contract Fate {
     // reward coefficient
     function destiny() internal {
         uint256 x = block.timestamp - last;
-        uint256 step = x / 86400;
+        uint256 step = x / 1 days;
         if (step >= 1) {
-            last = last + step * 86400;
+            last = last + step * 1 days;
             alpha = rmul(alpha, rpow(D, step, RAY));
         }
     }
