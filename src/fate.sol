@@ -17,46 +17,39 @@
 // You should have received a copy of the GNU Affero General Public License
 // along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-pragma solidity >=0.6.12;
+pragma solidity >=0.5.12;
 
 interface GemLike {
-    function mint(address,uint) external;
+    function mint(address, uint) external;
 }
 
 interface ManagerLike {
     function cdpCan(address, uint, address) external view returns (uint);
+
     function ilks(uint) external view returns (bytes32);
+
     function owns(uint) external view returns (address);
+
     function urns(uint) external view returns (address);
+
     function vat() external view returns (address);
-    function open(bytes32, address) external returns (uint);
-    function give(uint, address) external;
-    function cdpAllow(uint, address, uint) external;
-    function urnAllow(address, uint) external;
-    function frob(uint, int, int) external;
-    function flux(uint, address, uint) external;
-    function move(uint, address, uint) external;
-    function exit(address, uint, address, uint) external;
-    function quit(uint, address) external;
-    function enter(address, uint) external;
-    function shift(uint, uint) external;
 }
 
 interface VatLike {
-    function can(address, address) external view returns (uint);
     function ilks(bytes32) external view returns (uint, uint, uint, uint, uint);
-    function dai(address) external view returns (uint);
+
     function urns(bytes32, address) external view returns (uint, uint);
-    function frob(bytes32, address, address, address, int, int) external;
-    function hope(address) external;
-    function move(address, address, uint) external;
 }
 
 contract Fate {
     // --- Auth ---
-    mapping (address => uint256) public wards;
-    function rely(address usr) external auth { wards[usr] = 1; emit Rely(usr); }
-    function deny(address usr) external auth { wards[usr] = 0; emit Deny(usr); }
+    mapping(address => uint256) public wards;
+
+    function rely(address usr) external auth {wards[usr] = 1;
+        emit Rely(usr);}
+
+    function deny(address usr) external auth {wards[usr] = 0;
+        emit Deny(usr);}
     modifier auth {
         require(wards[msg.sender] == 1, "Fate/not-authorized");
         _;
@@ -73,7 +66,7 @@ contract Fate {
     uint256 public delay;  // Active Flag [seconds]
     uint256 public live;  // Active Flag
 
-    mapping (uint => uint256) public rates;      // CDPId => The rate of the last claim [ray]
+    mapping(uint => uint256) public rates;      // CDPId => The rate of the last claim [ray]
 
     // --- Events ---
     event Rely(address indexed usr);
@@ -82,9 +75,9 @@ contract Fate {
     event File(bytes32 indexed what, uint256 data);
 
     // --- Init ---
-    constructor(address gem_, address manager_,uint256 delay_) public {
+    constructor(address gem_, address manager_, uint256 delay_) public {
         wards[msg.sender] = 1;
-        start = now;
+        start = block.timestamp;
         delay = delay_;
         gem = GemLike(gem_);
         manager = ManagerLike(manager_);
@@ -94,7 +87,7 @@ contract Fate {
 
     // --- Administration ---
     function file(bytes32 what, uint256 data) external auth {
-        if      (what ==  "cut") require((cut = data) <= RAY, "Fate/cut-gt-RAY");
+        if (what == "cut") require((cut = data) <= RAY, "Fate/cut-gt-RAY");
         else if (what == "step") step = data;
         else if (what == "top") top = data;
         else if (what == "start") start = data;
@@ -105,6 +98,15 @@ contract Fate {
 
     // --- Math ---
     uint256 constant RAY = 10 ** 27;
+
+    function add(uint x, uint y) internal pure returns (uint z) {
+        require((z = x + y) >= x);
+    }
+
+    function sub(uint x, uint y) internal pure returns (uint z) {
+        require((z = x - y) <= x);
+    }
+
     function rmul(uint256 x, uint256 y) internal pure returns (uint256 z) {
         z = x * y;
         require(y == 0 || z / y == x);
@@ -139,13 +141,14 @@ contract Fate {
     }
 
     // Compute the next alpha value.
-    function calculate_alpha(uint256 dur) external view returns (uint256){
+    function destiny(uint256 dur) external view returns (uint256){
         return rmul(top, rpow(cut, dur / step, RAY));
     }
 
-    function claim(uint cdp){
+    // --- Earnings ---
+    function adventure(uint cdp){
         require(live == 1, "Fate/not-live");
-        require(add(start, delay) < now , "Fate/not-start-up");
+        require(add(start, delay) < block.timestamp, "Fate/not-start-up");
         address own = ManagerLike(manager).owns(cdp);
         require(own == address(this) || ManagerLike(manager).cdpCan(own, cdp, address(this)) == 1, "Fate/not-own-cdp");
 
@@ -155,8 +158,8 @@ contract Fate {
         (, uint256 rate,,,) = VatLike(vat).ilks(ilk);
         (, uint256 art) = VatLike(vat).urns(ilk, urn);
         require(rate > rates[cdp], "Fate/rate-too-low");
-        alpha = calculate_alpha(now - start -delay);
-        diff_rate = rate - rates[cdp];
+        alpha = destiny(sub(block.timestamp, sub(start, delay)));
+        diff_rate = sub(rate, rates[cdp]);
         reward = rmul(alpha, rmul(rate, art));
         gem.mint(msg.sender, reward);
         rates[cdp] = rate;
@@ -170,20 +173,20 @@ contract Fate {
 
         while (id > 0) {
             ids[i] = id;
-            (,id) = DssCdpManager(manager).list(id);
+            (, id) = DssCdpManager(manager).list(id);
             i++;
         }
     }
 
-    function claimAll(){
+    function treasure(){
         ids = getAllCdp(address(this));
         for (uint i = 0; i < ids.length; i++) {
-            claim(ids[i]);
+            adventure(ids[i]);
         }
     }
 
     // --- Shutdown ---
     function cage() external auth {
-       live = 0;
+        live = 0;
     }
 }
