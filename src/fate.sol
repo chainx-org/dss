@@ -11,6 +11,14 @@ interface JugLike {
     function drip(bytes32) external returns (uint256);
 }
 
+interface GetCdpsLike {
+    function getCdpsAsc(address manager, address guy) external view returns (
+        uint[] memory ids, 
+        address[] memory urns, 
+        bytes32[] memory ilks
+    );
+}
+
 interface TokenLike {
     function balanceOf(address) external returns (uint256);
     function mint(address,uint256) external;
@@ -20,14 +28,18 @@ contract Fate {
     VatLike                  public vat;   // CDP Engine
     JugLike                  public jug;   // Rate Engine
     TokenLike                public gov;   // Governance
-    mapping (address => mapping(bytes32 => uint256)) public rates;  // [ray]
+    GetCdpsLike              public cdps;   // CDPs   
     uint256                  public last;  // Last updated timestamp
-    uint256                   public alpha; // Reward coefficient
+    uint256                  public alpha; // Reward coefficient
+    address                  public manager; // Cdp manager
+    mapping (address => mapping(address => uint256)) public rates;  // [ray]
 
-    constructor(address vat_,address jug_, address gov_) public {
+    constructor(address vat_,address jug_, address gov_, address manager_, address cdps_) public {
         vat = VatLike(vat_);
         jug = JugLike(jug_);
         gov = TokenLike(gov_);
+        cdps = GetCdpsLike(cdps_);
+        manager = manager_;
         last = block.timestamp + 3 days;
         alpha = M;
     }
@@ -86,17 +98,27 @@ contract Fate {
     }
 
     // --- Earnings ---
-    function adventure(bytes32 ilk) external {
-        (, uint256 art) = vat.urns(ilk, msg.sender);
-        uint256 prev = rates[msg.sender][ilk];
+    function adventure(bytes32 ilk, address urn) internal returns (uint256 wad) {
+        (, uint256 art) = vat.urns(ilk, urn);
+        uint256 prev = rates[msg.sender][urn];
         if (prev == 0) prev = RAY;
         uint256 rate = jug.drip(ilk) - prev;
-        require(rate > 0, "Rebate/no-more-earnings");
-        uint256 wad = rmul(rate, art);
-        destiny();
-        wad = rmul(alpha, wad);
+        if (rate > 0) {
+            wad = rmul(rate, art);
+            wad = rmul(alpha, wad);
+            rates[msg.sender][urn] = add(prev, rate);
+        } else {
+            wad = 0;
+        }
+    }
 
-        gov.mint(msg.sender, wad);
-        rates[msg.sender][ilk] = add(prev, rate);
+    function treasure() external {
+        uint256 wads;
+        (, address[] memory urns, bytes32[] memory ilks) = cdps.getCdpsAsc(manager, msg.sender);
+        destiny();
+        for (uint i = 0; i < urns.length; i++) {
+            wads = wads + adventure(ilks[i], urns[i]);
+        }
+        gov.mint(msg.sender, wads);
     }
 }
