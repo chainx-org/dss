@@ -65,6 +65,7 @@ contract Fate {
     GemLike  public gem; // BDA contract
     ManagerLike public manager; // CDP Manager
     RegistryLike public registry; // Proxy registry
+
     // --- Data ---
     uint256 public step = 1 days; // Length of time between price drops [seconds]
     uint256 public cut = 0.99E27;  // Per-step multiplicative factor     [ray]
@@ -156,40 +157,52 @@ contract Fate {
     // --- Earnings ---
     function adventure(uint256 cdp) public {
         require(live == 1, "Fate/not-live");
-        require(add(start, delay) < block.timestamp, "Fate/not-start-up");
-        address own = ManagerLike(manager).owns(cdp);
-        require(own == address(this) || ManagerLike(manager).cdpCan(own, cdp, address(this)) == 1, "Fate/not-own-cdp");
+        uint256 dur = sub(block.timestamp, add(start, delay));
+        require(dur > 0, "Fate/not-start-up");
+        address own = manager.owns(cdp);
+        address proxy = registry.proxies(msg.sender);
 
-        address vat = ManagerLike(manager).vat();
-        address urn = ManagerLike(manager).urns(cdp);
-        bytes32 ilk = ManagerLike(manager).ilks(cdp);
+        require(own == msg.sender || own == proxy || manager.cdpCan(own, cdp, msg.sender) == 1, "Fate/not-own-cdp");
+
+        address vat = manager.vat();
+        address urn = manager.urns(cdp);
+        bytes32 ilk = manager.ilks(cdp);
         (, uint256 rate,,,) = VatLike(vat).ilks(ilk);
         (, uint256 art) = VatLike(vat).urns(ilk, urn);
-        require(rate > rates[cdp], "Fate/rate-too-low");
-        uint256 alpha = destiny(sub(block.timestamp, sub(start, delay)));
+
         uint256 diff_rate = sub(rate, rates[cdp]);
+        require(diff_rate > 0, "Fate/diff-rate-zero");
+        uint256 alpha = destiny(dur);
+        require(alpha > 0, "Fate/alpha-zero");
         uint256 reward = rmul(alpha, rmul(diff_rate, art));
+        require(reward > 0, "Fate/reward-zero");
+
         gem.mint(msg.sender, reward);
         rates[cdp] = rate;
     }
 
     function getAllCdp(address guy) public view returns (uint256[] memory ids) {
-        uint256 count = ManagerLike(manager).count(guy);
+        uint256 count = manager.count(guy);
         ids = new uint256[](count);
         uint256 i = 0;
-        uint256 id = ManagerLike(manager).first(guy);
+        uint256 id = manager.first(guy);
 
         while (id > 0) {
             ids[i] = id;
-            (, id) = ManagerLike(manager).list(id);
+            (, id) = manager.list(id);
             i++;
         }
     }
 
-    function treasure() external {
+    function treasure(){
+        uint[] ids = getAllCdp(msg.sender);
+        for (uint i = 0; i < ids.length; i++) {
+            adventure(id1s[i]);
+        }
+
         address proxy = registry.proxies(msg.sender);
-        uint256[] memory ids = getAllCdp(proxy);
-        for (uint256 i = 0; i < ids.length; i++) {
+        ids = getAllCdp(proxy);
+        for (uint i = 0; i < ids.length; i++) {
             adventure(ids[i]);
         }
     }
