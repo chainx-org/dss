@@ -149,7 +149,7 @@ contract Fate {
         }
     }
 
-    // Compute the next alpha value.
+    // compute the next alpha value
     function destiny(uint256 dur) public view returns (uint256){
         return rmul(top, rpow(cut, dur / step, RAY));
     }
@@ -181,7 +181,21 @@ contract Fate {
         rates[cdp] = rate;
     }
 
-    function getCdps(address guy) public view returns (uint256[] memory ids) {
+    function treasure() external {
+        uint256[] memory ids = cdps(msg.sender);
+        for (uint256 i = 0; i < ids.length; i++) {
+            adventure(ids[i]);
+        }
+
+        address proxy = registry.proxies(msg.sender);
+        ids = cdps(proxy);
+        for (uint256 i = 0; i < ids.length; i++) {
+            adventure(ids[i]);
+        }
+    }
+
+    // --- Get CDPs ---
+    function cdps(address guy) public view returns (uint256[] memory ids) {
         uint256 count = manager.count(guy);
         ids = new uint256[](count);
         uint256 i = 0;
@@ -191,19 +205,6 @@ contract Fate {
             ids[i] = id;
             (, id) = manager.list(id);
             i++;
-        }
-    }
-
-    function treasure() public {
-        uint256[] memory ids = getCdps(msg.sender);
-        for (uint256 i = 0; i < ids.length; i++) {
-            adventure(ids[i]);
-        }
-
-        address proxy = registry.proxies(msg.sender);
-        ids = getCdps(proxy);
-        for (uint256 i = 0; i < ids.length; i++) {
-            adventure(ids[i]);
         }
     }
 
