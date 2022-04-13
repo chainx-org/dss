@@ -20,36 +20,43 @@
 pragma solidity >=0.5.12;
 
 interface GemLike {
-    function mint(address, uint) external;
+    function mint(address, uint256) external;
 }
 
 interface ManagerLike {
-    function cdpCan(address, uint, address) external view returns (uint);
+    function cdpCan(address, uint256, address) external view returns (uint256);
 
-    function ilks(uint) external view returns (bytes32);
+    function ilks(uint256) external view returns (bytes32);
 
-    function owns(uint) external view returns (address);
+    function owns(uint256) external view returns (address);
 
-    function urns(uint) external view returns (address);
+    function urns(uint256) external view returns (address);
 
     function vat() external view returns (address);
+
+    function count(address) external view returns (uint256);
+
+    function first(address) external view returns (uint256);
+
+    function list(uint256) external view returns (uint256, uint256);
 }
 
 interface VatLike {
-    function ilks(bytes32) external view returns (uint, uint, uint, uint, uint);
+    function ilks(bytes32) external view returns (uint256, uint256, uint256, uint256, uint256);
 
-    function urns(bytes32, address) external view returns (uint, uint);
+    function urns(bytes32, address) external view returns (uint256, uint256);
+}
+
+interface RegistryLike {
+    function proxies(address) external view returns (address);
 }
 
 contract Fate {
     // --- Auth ---
     mapping(address => uint256) public wards;
 
-    function rely(address usr) external auth {wards[usr] = 1;
-        emit Rely(usr);}
-
-    function deny(address usr) external auth {wards[usr] = 0;
-        emit Deny(usr);}
+    function rely(address usr) external auth {wards[usr] = 1; emit Rely(usr);}
+    function deny(address usr) external auth {wards[usr] = 0; emit Deny(usr);}
     modifier auth {
         require(wards[msg.sender] == 1, "Fate/not-authorized");
         _;
@@ -57,7 +64,7 @@ contract Fate {
 
     GemLike  public gem; // BDA contract
     ManagerLike public manager; // CDP Manager
-
+    RegistryLike public registry; // Proxy registry
     // --- Data ---
     uint256 public step = 1 days; // Length of time between price drops [seconds]
     uint256 public cut = 0.99E27;  // Per-step multiplicative factor     [ray]
@@ -66,7 +73,7 @@ contract Fate {
     uint256 public delay;  // Active Flag [seconds]
     uint256 public live;  // Active Flag
 
-    mapping(uint => uint256) public rates;      // CDPId => The rate of the last claim [ray]
+    mapping(uint256 => uint256) public rates;      // CDPId => The rate of the last claim [ray]
 
     // --- Events ---
     event Rely(address indexed usr);
@@ -75,12 +82,13 @@ contract Fate {
     event File(bytes32 indexed what, uint256 data);
 
     // --- Init ---
-    constructor(address gem_, address manager_, uint256 delay_) public {
+    constructor (address gem_, address manager_, address registry_,uint256 delay_) public {
         wards[msg.sender] = 1;
         start = block.timestamp;
         delay = delay_;
         gem = GemLike(gem_);
         manager = ManagerLike(manager_);
+        registry = RegistryLike(registry_);
         live = 1;
         emit Rely(msg.sender);
     }
@@ -99,11 +107,11 @@ contract Fate {
     // --- Math ---
     uint256 constant RAY = 10 ** 27;
 
-    function add(uint x, uint y) internal pure returns (uint z) {
+    function add(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require((z = x + y) >= x);
     }
 
-    function sub(uint x, uint y) internal pure returns (uint z) {
+    function sub(uint256 x, uint256 y) internal pure returns (uint256 z) {
         require((z = x - y) <= x);
     }
 
@@ -141,12 +149,12 @@ contract Fate {
     }
 
     // Compute the next alpha value.
-    function destiny(uint256 dur) external view returns (uint256){
+    function destiny(uint256 dur) public view returns (uint256){
         return rmul(top, rpow(cut, dur / step, RAY));
     }
 
     // --- Earnings ---
-    function adventure(uint cdp){
+    function adventure(uint256 cdp) public {
         require(live == 1, "Fate/not-live");
         require(add(start, delay) < block.timestamp, "Fate/not-start-up");
         address own = ManagerLike(manager).owns(cdp);
@@ -158,29 +166,30 @@ contract Fate {
         (, uint256 rate,,,) = VatLike(vat).ilks(ilk);
         (, uint256 art) = VatLike(vat).urns(ilk, urn);
         require(rate > rates[cdp], "Fate/rate-too-low");
-        alpha = destiny(sub(block.timestamp, sub(start, delay)));
-        diff_rate = sub(rate, rates[cdp]);
-        reward = rmul(alpha, rmul(rate, art));
+        uint256 alpha = destiny(sub(block.timestamp, sub(start, delay)));
+        uint256 diff_rate = sub(rate, rates[cdp]);
+        uint256 reward = rmul(alpha, rmul(diff_rate, art));
         gem.mint(msg.sender, reward);
         rates[cdp] = rate;
     }
 
-    function getAllCdp(address guy) external view returns (uint[] memory ids) {
-        uint count = DssCdpManager(manager).count(guy);
-        ids = new uint[](count);
-        uint i = 0;
-        uint id = DssCdpManager(manager).first(guy);
+    function getAllCdp(address guy) public view returns (uint256[] memory ids) {
+        uint256 count = ManagerLike(manager).count(guy);
+        ids = new uint256[](count);
+        uint256 i = 0;
+        uint256 id = ManagerLike(manager).first(guy);
 
         while (id > 0) {
             ids[i] = id;
-            (, id) = DssCdpManager(manager).list(id);
+            (, id) = ManagerLike(manager).list(id);
             i++;
         }
     }
 
-    function treasure(){
-        ids = getAllCdp(address(this));
-        for (uint i = 0; i < ids.length; i++) {
+    function treasure() external {
+        address proxy = registry.proxies(msg.sender);
+        uint256[] memory ids = getAllCdp(proxy);
+        for (uint256 i = 0; i < ids.length; i++) {
             adventure(ids[i]);
         }
     }
