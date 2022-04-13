@@ -181,7 +181,7 @@ contract Fate {
         rates[cdp] = rate;
     }
 
-    function getAllCdp(address guy) public view returns (uint256[] memory ids) {
+    function getCdps(address guy) public view returns (uint256[] memory ids) {
         uint256 count = manager.count(guy);
         ids = new uint256[](count);
         uint256 i = 0;
@@ -194,15 +194,15 @@ contract Fate {
         }
     }
 
-    function treasure(){
-        uint[] ids = getAllCdp(msg.sender);
-        for (uint i = 0; i < ids.length; i++) {
-            adventure(id1s[i]);
+    function treasure() public {
+        uint256[] memory ids = getCdps(msg.sender);
+        for (uint256 i = 0; i < ids.length; i++) {
+            adventure(ids[i]);
         }
 
         address proxy = registry.proxies(msg.sender);
-        ids = getAllCdp(proxy);
-        for (uint i = 0; i < ids.length; i++) {
+        ids = getCdps(proxy);
+        for (uint256 i = 0; i < ids.length; i++) {
             adventure(ids[i]);
         }
     }
